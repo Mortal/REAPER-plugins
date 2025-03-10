@@ -4,18 +4,18 @@ from typing import Literal
 
 from reaper_python import *
 from reaper_loop import reaper_loop_run
-from rutil import get_time_selection, script_get_single_selected_media_item, range_intersect, MAX_STRBUF
+import rutil
 
 
 async def amain() -> None:
     modelname: Literal["mdx_extra_q", "htdemucs"] = "htdemucs"
-    two_stems: Literal["bass", "drums", "vocals"] | None = "vocals"
+    two_stems: Literal["bass", "drums", "vocals"] | None = None  # "vocals"
 
-    item = script_get_single_selected_media_item()
+    item = rutil.script_get_single_selected_media_item()
     track = RPR_GetMediaItem_Track(item)
     take = RPR_GetActiveTake(item)
     src = RPR_GetMediaItemTake_Source(take)
-    src, path, _ = RPR_GetMediaSourceFileName(src, "", MAX_STRBUF)
+    src, path, _ = RPR_GetMediaSourceFileName(src, "", rutil.MAX_STRBUF)
 
     assert os.path.exists(path)
     dirname, filename = os.path.split(path)
@@ -28,7 +28,7 @@ async def amain() -> None:
     startoffs = RPR_GetMediaItemTakeInfo_Value(take, "D_STARTOFFS")
     playrate = RPR_GetMediaItemTakeInfo_Value(take, "D_PLAYRATE")
     timestart, timeend = itempos, itempos + length
-    timestart, timeend = range_intersect(get_time_selection(), (timestart, timeend))
+    timestart, timeend = rutil.range_intersect(rutil.get_time_selection(), (timestart, timeend))
     assert timestart < timeend
     sourcestart = startoffs + (timestart - itempos) * playrate
     sourceend = startoffs + (timeend - itempos) * playrate
@@ -59,19 +59,20 @@ async def amain() -> None:
     paths = [os.path.join(dirname, modelname, f) for f in filenames]
     if not all(os.path.exists(p) for p in paths):
         proc = await asyncio.subprocess.create_subprocess_exec(
-            "gnome-terminal", "--wait", "--",
+            "gnome-terminal", "--geometry=122x10", "--wait", "--",
             "demucs", *two_stems_arg, "-n", modelname, "--float32", "-o", dirname, "--filename", filename_fmt, path
         )
-        await proc.wait()
+        exitcode = await proc.wait()
+        if exitcode:
+            raise Exception(f"gnome-terminal/demucs failed with exit code {exitcode}")
 
-    RPR_Undo_BeginBlock2(None)
-    try:
+    with rutil.undoblock("Split stems"):
         RPR_SetMediaItemSelected(item, False)
-
+        rutil.clear_selection()
         items = []
         for stem_path in paths:
             RPR_InsertMedia(stem_path, 1)
-            item2 = script_get_single_selected_media_item()
+            item2 = rutil.script_get_single_selected_media_item()
             take2 = RPR_GetActiveTake(item2)
             RPR_SetMediaItemInfo_Value(item2, "D_POSITION", timestart)
             RPR_SetMediaItemInfo_Value(item2, "D_LENGTH", timeend - timestart)
@@ -79,11 +80,8 @@ async def amain() -> None:
             RPR_SetMediaItemTakeInfo_Value(take2, "D_STARTOFFS", sourcestart)
             RPR_SetMediaItemSelected(item2, False)
             items.append(item2)
-        for item2 in items:
-            RPR_SetMediaItemSelected(item2, True)
+        rutil.set_selection(items)
         RPR_SetMediaTrackInfo_Value(track, "B_MUTE", 1.0)
-    finally:
-        RPR_Undo_EndBlock2(None, f"Split stems", 0)
 
 
 def main() -> None:

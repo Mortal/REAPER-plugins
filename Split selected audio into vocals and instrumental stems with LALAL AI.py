@@ -2,23 +2,23 @@ import os
 import shlex
 import sys
 import traceback
+
+import rutil
 from reaper_python import *
-from rutil import get_time_selection, script_get_single_selected_media_item, range_intersect, MAX_STRBUF
 
 
 def main() -> None:
-    item = script_get_single_selected_media_item()
+    item = rutil.script_get_single_selected_media_item()
     track = RPR_GetMediaItem_Track(item)
     take = RPR_GetActiveTake(item)
     src = RPR_GetMediaItemTake_Source(take)
-    src, path, _ = RPR_GetMediaSourceFileName(src, "", MAX_STRBUF)
+    src, path, _ = RPR_GetMediaSourceFileName(src, "", rutil.MAX_STRBUF)
     itempos = RPR_GetMediaItemInfo_Value(item, "D_POSITION")
     length = RPR_GetMediaItemInfo_Value(item, "D_LENGTH")
     startoffs = RPR_GetMediaItemTakeInfo_Value(take, "D_STARTOFFS")
     playrate = RPR_GetMediaItemTakeInfo_Value(take, "D_PLAYRATE")
-    # sourcelength = length * playrate
-    timestart, timeend = range_intersect(
-        get_time_selection(), (itempos, itempos + length)
+    timestart, timeend = rutil.range_intersect(
+        rutil.get_time_selection(), (itempos, itempos + length)
     )
     sourcestart = startoffs + (timestart - itempos) * playrate
     sourceend = startoffs + (timeend - itempos) * playrate
@@ -50,7 +50,7 @@ def main() -> None:
         RPR_SetMediaItemSelected(item, False)
 
         RPR_InsertMedia(stem_path, 1)
-        item2 = script_get_single_selected_media_item()
+        item2 = rutil.script_get_single_selected_media_item()
         take2 = RPR_GetActiveTake(item2)
         RPR_SetMediaItemInfo_Value(item2, "D_POSITION", timestart)
         RPR_SetMediaItemInfo_Value(item2, "D_LENGTH", timeend - timestart)
@@ -58,7 +58,7 @@ def main() -> None:
         RPR_SetMediaItemSelected(item2, False)
 
         RPR_InsertMedia(back_path, 1)
-        item3 = script_get_single_selected_media_item()
+        item3 = rutil.script_get_single_selected_media_item()
         take3 = RPR_GetActiveTake(item3)
         RPR_SetMediaItemInfo_Value(item3, "D_POSITION", timestart)
         RPR_SetMediaItemInfo_Value(item3, "D_LENGTH", timeend - timestart)

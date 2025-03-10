@@ -97,11 +97,11 @@ class ReaperCoopEventLoop(asyncio.SelectorEventLoop):
                     return
                 raise exc
             if unixloop._stopping:
-                print(f"{self.reaper_script_name} stopping", flush=True)
+                print(f"{self.reaper_script_name}({id(self)}) stopping", flush=True)
                 run_forever_cleanup()
             else:
                 RPR_runloop(f"{myname}()")
 
         setattr(sys.modules["__main__"], myname, _run_next_coop)
-        print(f"{self.reaper_script_name} starting", flush=True)
+        print(f"{self.reaper_script_name}({id(self)}) starting", flush=True)
         _run_next_coop()
