@@ -33,16 +33,16 @@ class TimeRange:
     def valid_open(self) -> bool:
         return self.start < self.end
 
-    def __add__(self, rhs: float) -> TimeRange:
+    def __add__(self, rhs: float) -> "TimeRange":
         return TimeRange(self.start + rhs, self.end + rhs)
 
-    def __sub__(self, rhs: float) -> TimeRange:
+    def __sub__(self, rhs: float) -> "TimeRange":
         return TimeRange(self.start - rhs, self.end - rhs)
 
-    def __mul__(self, rhs: float) -> TimeRange:
+    def __mul__(self, rhs: float) -> "TimeRange":
         return TimeRange(self.start * rhs, self.end * rhs)
 
-    def __div__(self, rhs: float) -> TimeRange:
+    def __div__(self, rhs: float) -> "TimeRange":
         return TimeRange(self.start / rhs, self.end / rhs)
 
     @property
