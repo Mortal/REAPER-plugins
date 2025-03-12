@@ -68,7 +68,7 @@ async def amain() -> None:
         n = 8
     diffs = compute_diff(times, n)
 
-    def try_bpm(bpm: float) -> tuple[float, float]:
+    def try_bpm(bpm: float) -> tuple[float, float, float]:
         # Compute modulo offsets and put into N bins
         phase_01 = [(x % (60 / bpm)) * bpm / 60 for x in times]
         phase_int = [int(p * len(times)) for p in phase_01]
@@ -82,10 +82,10 @@ async def amain() -> None:
         loss = sum(min((abs(p - offset_01), abs(p - 1 - offset_01), abs(p + 1 - offset_01)))**2 for p in phase_01) / len(phase_01)
         offset = offset_01 * 60 / bpm
         print(f"{bpm=} {offset_01=} {avg_correction=} {phase_corrections[0]=} {loss=}")
-        return loss, offset
+        return loss, offset, bpm
 
     bpm = 60 / compute_median(diffs)
-    _loss, offset = min((try_bpm(bpm), try_bpm(round(bpm))))
+    _loss, offset, bpm = min((try_bpm(bpm), try_bpm(round(bpm))))
 
     with rutil.undoblock("Run beat detection"):
         if time_selection:
@@ -100,7 +100,7 @@ async def amain() -> None:
             tempbpm = 60 / (firstbeat - firstbeat_qn_floor_time)
             RPR_SetTempoTimeSigMarker(None, -1, firstbeat_qn_floor_time, -1, -1, tempbpm, 0, 0, False)
         RPR_SetTempoTimeSigMarker(None, -1, firstbeat, -1, -1, bpm, 0, 0, False)
-        RPR_UpdateArrange()
+    RPR_UpdateArrange()
 
 
 def main() -> None:
