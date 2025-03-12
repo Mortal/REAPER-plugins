@@ -8,6 +8,7 @@ from typing import Literal
 
 from reaper_python import *
 from reaper_loop import reaper_loop_run
+import autil
 import rutil
 
 
@@ -15,8 +16,8 @@ def compute_median(xs: Sequence[float]) -> float:
     return sorted(xs)[len(xs)//2]
 
 
-def compute_diff(xs: Sequence[float]) -> list[float]:
-    return [b - a for a, b in zip(xs, xs[1:])]
+def compute_diff(xs: Sequence[float], n: int) -> list[float]:
+    return [(b - a) / n for a, b in zip(xs, xs[n:])]
 
 
 def compute_mode(xs: Sequence[int]) -> int:
@@ -25,13 +26,15 @@ def compute_mode(xs: Sequence[int]) -> int:
 
 async def amain() -> None:
     item = rutil.script_get_single_selected_media_item()
+    source_slice = autil.script_get_selected_audio_source(item)
+    time_selection = rutil.get_time_selection()
+    source_slice = await autil.cut_source_slice_into_new_file(source_slice)
+    item_range = source_slice.item_time_range
     track = item.track
-    take = item.active_take
-    src = take.source
-    path = src.path
-    # mastertrack = RPR_GetMasterTrack(None)
-    itempos = item.position
-    # length = RPR_GetMediaItemInfo_Value(item, "D_LENGTH")
+    path = source_slice.path
+    startoffs = source_slice.startoffs
+    playrate = source_slice.playrate
+    itempos = source_slice.itemstart
 
     assert os.path.exists(path)
     proc = await asyncio.subprocess.create_subprocess_exec(
@@ -42,23 +45,56 @@ async def amain() -> None:
     exitcode = await proc.wait()
     if exitcode:
         raise Exception(f"aubiotrack exited with code {exitcode}")
-    times = list(map(float, stdout_bytes.decode().split()))
-    times = times[2:-2]
+    times = [
+        (float(tok) - startoffs) / playrate + itempos
+        for tok in stdout_bytes.decode().split()
+    ]
     if not times:
-        return
-    diffs = compute_diff(times)
-    modulus = compute_median(diffs)
-    # Compute modulo offsets and put into N bins
-    phase_int = [int(((x % modulus) / modulus) * len(times)) for x in times]
-    # Use mode as the offset
-    offset = compute_mode(phase_int) / len(times) * modulus
-    # Now peaks are at offset + i * modulus
+        raise Exception("aubiotrack detected no beats in the item's source")
+    if len(times) == 1:
+        raise Exception("aubiotrack only detected 1 beat in the item's source")
+    assert times == sorted(times)
+    # for t in times[::-1]:
+    #      RPR_SplitMediaItem(item.item, t)
+    # RPR_UpdateArrange()
+    # return
+    if len(times) <= 2:
+        n = 1
+    elif len(times) <= 4:
+        n = 2
+    elif len(times) <= 8:
+        n = 4
+    else:
+        n = 8
+    diffs = compute_diff(times, n)
 
-    bpm = 60 / modulus
+    def try_bpm(bpm: float) -> tuple[float, float]:
+        # Compute modulo offsets and put into N bins
+        phase_01 = [(x % (60 / bpm)) * bpm / 60 for x in times]
+        phase_int = [int(p * len(times)) for p in phase_01]
+        # Use mode as the offset
+        offset_01 = compute_mode(phase_int) / len(times)
+        # Now peaks are at offset + i * (60 / bpm)
+        phase_offs = [(p - offset_01 + 0.5) % 1.0 for p in phase_01]
+        phase_corrections = [p - 0.5 for p in phase_offs if 0.25 <= p <= 0.75]
+        avg_correction = sum(phase_corrections) / len(phase_corrections)
+        offset_01 -= avg_correction
+        loss = sum(min((abs(p - offset_01), abs(p - 1 - offset_01), abs(p + 1 - offset_01)))**2 for p in phase_01) / len(phase_01)
+        offset = offset_01 * 60 / bpm
+        print(f"{bpm=} {offset_01=} {avg_correction=} {phase_corrections[0]=} {loss=}")
+        return loss, offset
+
+    bpm = 60 / compute_median(diffs)
+    _loss, offset = min((try_bpm(bpm), try_bpm(round(bpm))))
+
     with rutil.undoblock("Run beat detection"):
-        firstbeat = itempos + offset
+        if time_selection:
+            start = min(time_selection.start, itempos)
+        else:
+            start = itempos
+        firstbeat = offset + 60 / bpm * max(0, math.floor((start - offset) / 60 * bpm))
         firstbeat_qn = RPR_TimeMap2_timeToQN(None, firstbeat)
-        firstbeat_qn_floor = math.floor(firstbeat_qn)
+        firstbeat_qn_floor = math.floor(firstbeat_qn - 0.5)
         firstbeat_qn_floor_time = RPR_TimeMap2_QNToTime(None, firstbeat_qn_floor)
         if (firstbeat_qn - firstbeat_qn_floor) > 0.001:
             tempbpm = 60 / (firstbeat - firstbeat_qn_floor_time)

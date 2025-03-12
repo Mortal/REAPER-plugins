@@ -19,29 +19,38 @@ class SplitStems:
 
     @property
     def basename(self) -> str:
-        return os.path.basename(self.source_slice.path)
+        return os.path.splitext(os.path.basename(self.source_slice.path))[0]
 
 
-async def prep_split_stems() -> SplitStems:
+async def prep_split_stems(cut_fraction: float) -> SplitStems:
+    assert 0 <= cut_fraction <= 1.0
     item = rutil.script_get_single_selected_media_item()
     source_slice = autil.script_get_selected_audio_source(item)
-    if source_slice.slice_fraction < 0.5:
+    if source_slice.slice_fraction < cut_fraction:
         source_slice = await autil.cut_source_slice_into_new_file(source_slice)
     return SplitStems(item, source_slice)
 
 
 def insert_split_stems(prep: SplitStems, paths: list[str]) -> None:
-    prep.item.selected = False
-    rutil.clear_selection()
-    items = []
-    for stem_path in paths:
-        RPR_InsertMedia(stem_path, 1)
-        item2 = rutil.script_get_single_selected_media_item()
-        take2 = item2.active_take
-        item2.time_range = prep.source_slice.item_time_range
-        take2.playrate = prep.source_slice.playrate
-        take2.startoffs = prep.source_slice.startoffs
-        item2.selected = False
-        items.append(item2)
-    rutil.set_selection(items)
-    prep.item.track.muted = True
+    with rutil.undoblock("Split stems"):
+        timebase = prep.item.timebase
+        prep.item.selected = False
+        rutil.clear_selection()
+        # Select item.track to make sure new tracks are right below it
+        tracks = rutil.clear_track_selection()
+        prep.item.track.selected = True
+        items = []
+        for stem_path in paths:
+            RPR_InsertMedia(stem_path, 1)
+            item2 = rutil.script_get_single_selected_media_item()
+            take2 = item2.active_take
+            print(prep.source_slice.item_time_range)
+            item2.time_range = prep.source_slice.item_time_range
+            take2.playrate = prep.source_slice.playrate
+            take2.startoffs = prep.source_slice.startoffs
+            item2.timebase = timebase
+            item2.selected = False
+            items.append(item2)
+        rutil.set_selection(items)
+        prep.item.track.muted = True
+        rutil.set_track_selection(tracks)

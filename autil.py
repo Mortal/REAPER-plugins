@@ -53,4 +53,4 @@ def script_get_selected_audio_source(item: RMediaItem, inside_time_selection: bo
         if not time_range.valid_open:
             raise Exception("Time selection does not overlap with given media item")
     source_range = (time_range - item.position) * playrate + take.startoffs
-    return SourceSlice(src.path, src.length_seconds, source_range, playrate, item.position)
+    return SourceSlice(src.path, src.length_seconds, source_range, playrate, time_range.start)

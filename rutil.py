@@ -33,6 +33,13 @@ class TimeRange:
     def valid_open(self) -> bool:
         return self.start < self.end
 
+    def contains(self, other: "TimeRange | float") -> bool:
+        assert self.valid_closed
+        if isinstance(other, TimeRange):
+            assert other.valid_closed
+            return self.start <= other.start and other.end <= self.end
+        return self.start <= other <= self.end
+
     def __add__(self, rhs: float) -> "TimeRange":
         return TimeRange(self.start + rhs, self.end + rhs)
 
@@ -49,6 +56,10 @@ class TimeRange:
     def length(self) -> float:
         assert self.valid_closed
         return self.end - self.start
+
+
+def get_cursor_position_seconds() -> float:
+    return RPR_GetCursorPosition()
 
 
 def get_time_selection() -> TimeRange | None:
@@ -85,6 +96,21 @@ class RTrack:
     def muted(self, v: bool) -> None:
         RPR_SetMediaTrackInfo_Value(self.track, "B_MUTE", 1.0 if v else 0.0)
 
+    @property
+    def selected(self) -> bool:
+        return bool(RPR_IsTrackSelected(self.track))
+
+    @selected.setter
+    def selected(self, v: bool) -> None:
+        RPR_SetTrackSelected(self.track, v)
+
+    @property
+    def name(self) -> str:
+        retval, _track, name, _ = RPR_GetTrackName(self.track, "", MAX_STRBUF)
+        assert retval
+        return name
+
+    # No @name.setter - there's no RPR_SetTrackName?????
 
 
 @dataclass
@@ -167,6 +193,14 @@ class RMediaItem:
         RPR_SetMediaItemInfo_Value(self.item, "D_LENGTH", p)
 
     @property
+    def timebase(self) -> float:
+        return RPR_GetMediaItemInfo_Value(self.item, "C_BEATATTACHMODE")
+
+    @timebase.setter
+    def timebase(self, p: float) -> None:
+        RPR_SetMediaItemInfo_Value(self.item, "C_BEATATTACHMODE", p)
+
+    @property
     def time_range(self) -> TimeRange:
         p = self.position
         return TimeRange(p, p + self.length)
@@ -211,5 +245,26 @@ def set_selection(items):
 
 
 def select_all(items):
+    for item in items:
+        item.selected = True
+
+
+def get_track_selection():
+    return [RTrack(RPR_GetSelectedTrack(None, i)) for i in range(RPR_CountSelectedTracks(None))]
+
+
+def clear_track_selection():
+    items = get_track_selection()
+    for item in items:
+        item.selected = False
+    return items
+
+
+def set_track_selection(items):
+    clear_track_selection()
+    select_all_tracks(items)
+
+
+def select_all_tracks(items):
     for item in items:
         item.selected = True

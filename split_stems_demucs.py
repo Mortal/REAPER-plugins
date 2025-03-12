@@ -13,10 +13,11 @@ async def split_stems_demucs(*, two_stems: Literal["bass", "drums", "vocals"] | 
         two_stems_arg = []
         stems = ["bass", "drums", "vocals", "other"]
 
-    prep = await split_stems.prep_split_stems()
+    prep = await split_stems.prep_split_stems(0.5)
     filename_fmt = f'{prep.basename}_{{stem}}_split_by_demucs.wav'
     filenames = [filename_fmt.format(stem=s) for s in stems]
-    paths = [os.path.join(prep.dirname, modelname, f) for f in filenames]
+    paths = [os.path.join(prep.dirname, f) for f in filenames]
+    opaths = [os.path.join(prep.dirname, modelname, f) for f in filenames]
     if not all(os.path.exists(p) for p in paths):
         proc = await asyncio.subprocess.create_subprocess_exec(
             "gnome-terminal", "--geometry=122x10", "--wait", "--",
@@ -25,4 +26,7 @@ async def split_stems_demucs(*, two_stems: Literal["bass", "drums", "vocals"] | 
         exitcode = await proc.wait()
         if exitcode:
             raise Exception(f"gnome-terminal/demucs failed with exit code {exitcode}")
+        assert all(os.path.exists(p) for p in opaths)
+        for finalpath, outpath in zip(paths, opaths):
+            os.rename(outpath, finalpath)
     split_stems.insert_split_stems(prep, paths)
