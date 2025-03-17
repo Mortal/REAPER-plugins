@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import re
+import select
+import subprocess
+import sys
+import time
+import traceback
+from typing import Literal
+
+parser = argparse.ArgumentParser()
+parser.add_argument("filename")
+parser.add_argument("start", type=float)
+parser.add_argument("end", type=float)
+parser.add_argument("stem_track")
+parser.add_argument("back_track")
+
+
+def print_limits(apikey: str, duration: float) -> None:
+    limits_str = subprocess.check_output(
+        ("curl", "-s", f"https://www.lalal.ai/billing/get-limits/?key={apikey}")
+    )
+    try:
+        limits = json.loads(limits_str)
+        assert limits["status"] == "success"
+    except (AssertionError, ValueError, KeyError, TypeError):
+        print(limits_str.decode("utf-8", errors="replace"))
+        raise
+    print(f"Account email: {limits.get('email')}")
+    left = limits.get("process_duration_left")
+    print(f"Time remaining: {left} minutes")
+    if left and duration / 60 > left:
+        raise SystemExit("Not enough credits on account")
+
+
+def assert_can_write(f: str) -> bool:
+    if os.access(f, os.F_OK):
+        assert os.access(f, os.W_OK)
+        assert os.path.isfile(f)
+    else:
+        assert os.path.exists(os.path.dirname(f))
+        assert os.path.isdir(os.path.dirname(f))
+        assert os.access(os.path.dirname(f), os.W_OK)
+    return True
+
+
+def main() -> None:
+    args = parser.parse_args()
+
+    try:
+        with open(os.path.expanduser("~/.cache/lalalapikey")) as fp:
+            apikey = fp.read().strip()
+    except FileNotFoundError:
+        apikey = ""
+    if not re.fullmatch(r"[0-9a-f]+", apikey):
+        raise SystemExit(
+            "Please put your 16-digit hexadecimal lalal API key into ~/.cache/lalalapikey"
+        )
+
+    assert assert_can_write(args.stem_track)
+    assert assert_can_write(args.back_track)
+
+    dn, fn = os.path.split(args.filename)
+    bn, ext = os.path.splitext(fn)
+    tmpfile = os.path.join(dn, f"{bn}.{os.getpid()}.flac")
+    shellscript = r"""ffmpeg -v fatal -i "$1" -ss "$2" -to "$3" -y "$4" &&
+    curl -s https://www.lalal.ai/api/upload/ --data-binary @"$4" \
+            --header "Content-Disposition: attachment; filename=$5" \
+            --header "Authorization: license $6"
+    """
+    cmdline = [
+        "/bin/bash",
+        "-c",
+        shellscript,
+        "--",
+        args.filename,
+        str(args.start),
+        str(args.end),
+        tmpfile,
+        f"{bn}.flac",
+        apikey,
+    ]
+    splitter: Literal["phoenix", "orion", "perseus"] = "perseus"
+    stem: Literal[
+        "vocals",
+        "voice",
+        "drum",
+        "bass",
+        "piano",
+        "electric_guitar",
+        "acoustic_guitar",
+        "synthesizer",
+        "strings",
+        "wind",
+    ] = "vocals"
+    dereverb_enabled = False
+    enhanced_processing_enabled = (
+        True  # True = "Clear cut", False = "Deep extraction" (I think!)
+    )
+    with subprocess.Popen(
+        cmdline, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE
+    ) as p:
+        assert p.stdout is not None
+        print(f"Filename: {fn}")
+        duration_secs = args.end - args.start
+        print(f"Duration: {duration_secs/60:.4f} minutes")
+        print("Uploading to lalal.ai...\n", flush=True)
+        print_limits(apikey, args.end - args.start)
+        print(
+            f"\nSettings:\n{splitter = }\n{stem = }\n{dereverb_enabled = }\n{enhanced_processing_enabled = }"
+        )
+        print("\nReally process? [y/n]", flush=True)
+        for i in range(10):
+            inp = input()
+            if inp in ("y", "n"):
+                break
+            print("Please type 'y' or 'n'.", flush=True)
+        else:
+            p.terminate()
+            raise SystemExit(2)
+        if inp != "y":
+            p.terminate()
+            raise SystemExit(1)
+        upload_response_bytes: bytes = p.stdout.read()
+        exitcode = p.wait()
+    try:
+        if exitcode:
+            raise SystemExit(f"processing/uploading failed (exit code {exitcode})")
+        upload_response = json.loads(
+            upload_response_bytes[upload_response_bytes.index(b"{") :]
+        )
+        assert upload_response["status"] == "success"
+        api_duration = upload_response.get("duration")
+        if (
+            not isinstance(api_duration, int | float)
+            or abs(api_duration - duration_secs) > 1
+        ):
+            print(
+                f"WARNING: API reported duration {api_duration} seconds, but we uploaded {duration_secs} seconds",
+                flush=True,
+            )
+        params = [
+            {
+                "id": upload_response["id"],
+                "splitter": splitter,
+                "stem": stem,
+                "dereverb_enabled": dereverb_enabled,
+                "enhanced_processing_enabled": enhanced_processing_enabled,
+            }
+        ]
+        cmdline = [
+            "curl",
+            "-s",
+            "https://www.lalal.ai/api/split/",
+            "--header",
+            f"Authorization: license {apikey}",
+            "--form-string",
+            f"params={json.dumps(params)}",
+        ]
+    except Exception:
+        print(upload_response_bytes.decode("utf-8", errors="replace"))
+        raise
+    split_response_bytes = subprocess.check_output(cmdline)
+    try:
+        split_response = json.loads(split_response_bytes)
+        assert split_response["status"] == "success"
+        check_cmdline = [
+            "curl",
+            "-s",
+            "https://www.lalal.ai/api/check/",
+            "--form-string",
+            f'id={upload_response["id"]}',
+            "--header",
+            f"Authorization: license {apikey}",
+        ]
+    except Exception:
+        print(split_response_bytes.decode("utf-8", errors="replace"))
+        raise
+    prev_progress = ""
+    while True:
+        check_response_bytes = subprocess.check_output(check_cmdline)
+        try:
+            check_response = json.loads(check_response_bytes)
+            assert check_response["status"] == "success"
+            check_result = check_response["result"][upload_response["id"]]
+            assert check_result["status"] == "success"
+            split_result = check_result.get("split")
+            task_result = check_result.get("task") or {}
+            progress = str(task_result.get("progress") or "?")
+        except Exception:
+            print(split_response_bytes.decode("utf-8", errors="replace"))
+            print(check_response_bytes.decode("utf-8", errors="replace"))
+            raise
+        if split_result:
+            break
+        if progress != prev_progress:
+            prev_progress = progress
+            print(f"Progress: {progress}%", flush=True)
+        time.sleep(1)
+    with subprocess.Popen(
+        ("curl", "-s", "-o", args.stem_track, split_result["stem_track"])
+    ) as p2:
+        subprocess.check_call(
+            ("curl", "-s", "-o", args.back_track, split_result["back_track"])
+        )
+        p2.wait()
+
+
+if __name__ == "__main__":
+    try:
+        ok = 0
+        main()
+        ok = 1
+    except SystemExit as exc:
+        if exc.args:
+            if isinstance(exc.args[0], int):
+                raise exc
+            print(exc.args[0], file=sys.stderr, flush=True)
+    except Exception:
+        traceback.print_exc()
+        raise SystemExit(1)
+    finally:
+        if os.isatty(0) and not ok:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            print("Press any key to exit, or wait 30 seconds...", flush=True)
+            select.select([0], [], [], 30)
