@@ -41,7 +41,9 @@ def reaper_run_until_complete_cb(fut):
     if not fut.cancelled():
         exc = fut.exception()
         if exc is not None:
-            traceback.print_exception(exc, file=sys.stdout)
+            from reaper_python import RPR_ShowConsoleMsg
+
+            RPR_ShowConsoleMsg("".join(traceback.format_exception(exc)))
     typing.cast(Any, asyncio.futures)._get_loop(fut).stop()
 
 
