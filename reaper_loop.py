@@ -65,8 +65,9 @@ class ReaperCoopEventLoop(asyncio.SelectorEventLoop):
     def reaper_run_forever(self) -> None:
         from reaper_python import RPR_ShowConsoleMsg
 
-        # The following special function is injected by REAPER
+        # The following special functions are injected by REAPER
         RPR_runloop: Callable[[str], None] = sys.modules["__main__"].RPR_runloop
+        RPR_atexit: Callable[[str], None] = sys.modules["__main__"].RPR_atexit
         unixloop = typing.cast(Any, self)
         # Access methods to make sure they exist on self
         run_forever_setup = unixloop._run_forever_setup
@@ -84,9 +85,40 @@ class ReaperCoopEventLoop(asyncio.SelectorEventLoop):
             run_forever_cleanup()
             raise
 
-        myname = f"__loop{id(self)}"
+        runloop = f"__runloop{id(self)}"
+        atexit = f"__atexit{id(self)}"
 
-        def _run_next_coop() -> None:
+        def _atexit_coop() -> None:
+            if not self.is_running():
+                return
+            self.stop()
+            # After raising CancelledError in a coroutine,
+            # it can await something new, which we can again cancel.
+            # How many times should we repeat that?
+            cancels = 10
+            for _ in range(cancels):
+                tasks = asyncio.tasks.all_tasks(self)
+                if not tasks:
+                    break
+                for task in tasks:
+                    task.cancel()
+                try:
+                    run_once()
+                except BaseException as exc:
+                    print(f"{self.reaper_script_name}({id(self)}) cancelled", flush=True)
+                    run_forever_cleanup()
+                    if isinstance(exc, SystemExit):
+                        # Do not reraise SystemExit as it causes REAPER to exit.
+                        if exc.args:
+                            RPR_ShowConsoleMsg(f"{exc.args[0]}")
+                        return
+                    raise exc
+            else:
+                print(f"{self.reaper_script_name}({id(self)}) dropping {len(tasks)} stubborn tasks", flush=True)
+            print(f"{self.reaper_script_name}({id(self)}) cancelled", flush=True)
+            run_forever_cleanup()
+
+        def _runloop_coop() -> None:
             try:
                 unixloop.call_soon(lambda: None)
                 run_once()
@@ -102,8 +134,10 @@ class ReaperCoopEventLoop(asyncio.SelectorEventLoop):
                 print(f"{self.reaper_script_name}({id(self)}) stopping", flush=True)
                 run_forever_cleanup()
             else:
-                RPR_runloop(f"{myname}()")
+                RPR_runloop(f"{runloop}()")
 
-        setattr(sys.modules["__main__"], myname, _run_next_coop)
+        setattr(sys.modules["__main__"], runloop, _runloop_coop)
+        setattr(sys.modules["__main__"], atexit, _atexit_coop)
         print(f"{self.reaper_script_name}({id(self)}) starting", flush=True)
-        _run_next_coop()
+        _runloop_coop()
+        RPR_atexit(f"{atexit}()")
