@@ -7,7 +7,7 @@ import rutil
 
 
 def compute_median(xs: Sequence[float]) -> float:
-    return sorted(xs)[len(xs)//2]
+    return sorted(xs)[len(xs) // 2]
 
 
 def compute_diff(xs: Sequence[float], n: int) -> list[float]:
@@ -37,7 +37,9 @@ def main() -> None:
     if not times:
         raise Exception("Please select a media item with an active take with markers")
     if len(times) == 1:
-        raise Exception("Please select a media item with an active take with at least 2 markers")
+        raise Exception(
+            "Please select a media item with an active take with at least 2 markers"
+        )
     times = sorted(set(times))
     if len(times) <= 2:
         n = 1
@@ -65,7 +67,11 @@ def main() -> None:
         avg_correction = sum(phase_corrections) / len(phase_corrections)
         offset_01 -= avg_correction
         # Compute loss as mean square error
-        loss = sum(min((abs(p - offset_01), abs(p - 1 - offset_01), abs(p + 1 - offset_01)))**2 for p in phase_01) / len(phase_01)
+        loss = sum(
+            min((abs(p - offset_01), abs(p - 1 - offset_01), abs(p + 1 - offset_01)))
+            ** 2
+            for p in phase_01
+        ) / len(phase_01)
         offset = offset_01 * 60 / bpm
         return loss, offset, bpm
 
@@ -79,7 +85,9 @@ def main() -> None:
         firstbeat_qn_floor_time = RPR_TimeMap2_QNToTime(None, firstbeat_qn_floor)
         if (firstbeat_qn - firstbeat_qn_floor) > 0.001:
             tempbpm = 60 / (firstbeat - firstbeat_qn_floor_time)
-            RPR_SetTempoTimeSigMarker(None, -1, firstbeat_qn_floor_time, -1, -1, tempbpm, 0, 0, False)
+            RPR_SetTempoTimeSigMarker(
+                None, -1, firstbeat_qn_floor_time, -1, -1, tempbpm, 0, 0, False
+            )
         RPR_SetTempoTimeSigMarker(None, -1, firstbeat, -1, -1, bpm, 0, 0, False)
         if time_selection is not None:
             rutil.set_time_selection(time_selection)

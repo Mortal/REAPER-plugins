@@ -44,7 +44,9 @@ async def gnome_term_prompt_for_input(message: str, initial: str = "") -> str | 
 
 async def amain() -> None:
     projpath, _ = RPR_GetProjectPath("", rutil.MAX_STRBUF)
-    searchterm = await gnome_term_prompt_for_input("\nEnter yt-dlp search term\n", "ytsearch:")
+    searchterm = await gnome_term_prompt_for_input(
+        "\nEnter yt-dlp search term\n", "ytsearch:"
+    )
     if not searchterm or searchterm.strip() == "ytsearch:":
         return
     filename = await run_ytdlp(searchterm.strip(), projpath)
@@ -57,7 +59,19 @@ async def run_ytdlp(searchterm: str, outdir: str) -> str:
     tmpfile = tempfile.mktemp(prefix="path", suffix=".txt")
     try:
         proc = await asyncio.subprocess.create_subprocess_exec(
-            "gnome-terminal", "--wait", "--", "yt-dlp", "-P", outdir, "-f", "m4a", "--print-to-file", "after_move:filepath", tmpfile, "--", searchterm,
+            "gnome-terminal",
+            "--wait",
+            "--",
+            "yt-dlp",
+            "-P",
+            outdir,
+            "-f",
+            "m4a",
+            "--print-to-file",
+            "after_move:filepath",
+            tmpfile,
+            "--",
+            searchterm,
         )
         exitcode = await proc.wait()
         if exitcode:

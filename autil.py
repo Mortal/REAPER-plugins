@@ -20,7 +20,9 @@ class SourceSlice:
 
     @property
     def item_time_range(self) -> TimeRange:
-        return TimeRange(self.itemstart, self.itemstart + self.slice.length / self.playrate)
+        return TimeRange(
+            self.itemstart, self.itemstart + self.slice.length / self.playrate
+        )
 
     @property
     def startoffs(self) -> float:
@@ -35,14 +37,28 @@ async def cut_source_slice_into_new_file(s: SourceSlice) -> SourceSlice:
     cutfile = os.path.join(dirname, f"{cutbase}.flac")
     if not os.path.exists(cutfile):
         proc = await asyncio.subprocess.create_subprocess_exec(
-            "gnome-terminal", "--wait", "--",
-            'ffmpeg', '-i', s.path, '-ss', str(s.slice.start), '-to', str(s.slice.end), '-y', cutfile
+            "gnome-terminal",
+            "--wait",
+            "--",
+            "ffmpeg",
+            "-i",
+            s.path,
+            "-ss",
+            str(s.slice.start),
+            "-to",
+            str(s.slice.end),
+            "-y",
+            cutfile,
         )
         await proc.wait()
-    return SourceSlice(cutfile, s.slice.length, s.slice - s.slice.start, s.playrate, s.itemstart)
+    return SourceSlice(
+        cutfile, s.slice.length, s.slice - s.slice.start, s.playrate, s.itemstart
+    )
 
 
-def script_get_selected_audio_source(item: RMediaItem, inside_time_selection: bool = True) -> SourceSlice:
+def script_get_selected_audio_source(
+    item: RMediaItem, inside_time_selection: bool = True
+) -> SourceSlice:
     take = item.active_take
     src = take.source
     playrate = take.playrate
@@ -53,4 +69,6 @@ def script_get_selected_audio_source(item: RMediaItem, inside_time_selection: bo
         if not time_range.valid_open:
             raise Exception("Time selection does not overlap with given media item")
     source_range = (time_range - item.position) * playrate + take.startoffs
-    return SourceSlice(src.path, src.length_seconds, source_range, playrate, time_range.start)
+    return SourceSlice(
+        src.path, src.length_seconds, source_range, playrate, time_range.start
+    )

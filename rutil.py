@@ -80,9 +80,7 @@ def set_time_selection(t: TimeRange) -> None:
     isSet, isLoop, startOut, endOut, allowautoseek = RPR_GetSet_LoopTimeRange(
         False, False, 0.0, 0.0, False
     )
-    RPR_GetSet_LoopTimeRange(
-        True, isLoop, t.start, t.end, allowautoseek
-    )
+    RPR_GetSet_LoopTimeRange(True, isLoop, t.start, t.end, allowautoseek)
 
 
 MAX_STRBUF = 4 * 1024 * 1024
@@ -181,7 +179,9 @@ class RMediaItemTake:
         res: list[float] = []
         n = RPR_GetNumTakeMarkers(self.take)
         for i in range(n):
-            srcpos, _take, _i, _name, _name_sz, _color_out = RPR_GetTakeMarker(self.take, i, "", MAX_STRBUF, 0)
+            srcpos, _take, _i, _name, _name_sz, _color_out = RPR_GetTakeMarker(
+                self.take, i, "", MAX_STRBUF, 0
+            )
             res.append(srcpos)
         return res
 
@@ -259,7 +259,10 @@ def script_get_single_selected_media_item() -> RMediaItem:
 
 
 def get_item_selection():
-    return [RMediaItem(RPR_GetSelectedMediaItem(None, i)) for i in range(RPR_CountSelectedMediaItems(None))]
+    return [
+        RMediaItem(RPR_GetSelectedMediaItem(None, i))
+        for i in range(RPR_CountSelectedMediaItems(None))
+    ]
 
 
 def clear_item_selection():
@@ -280,7 +283,10 @@ def select_all(items):
 
 
 def get_track_selection():
-    return [RTrack(RPR_GetSelectedTrack(None, i)) for i in range(RPR_CountSelectedTracks(None))]
+    return [
+        RTrack(RPR_GetSelectedTrack(None, i))
+        for i in range(RPR_CountSelectedTracks(None))
+    ]
 
 
 def clear_track_selection():

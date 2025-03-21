@@ -17,6 +17,7 @@ Usage:
 
     reaper_loop_run(main)
 """
+
 import asyncio.base_events
 import logging
 import sys
@@ -105,7 +106,9 @@ class ReaperCoopEventLoop(asyncio.SelectorEventLoop):
                 try:
                     run_once()
                 except BaseException as exc:
-                    print(f"{self.reaper_script_name}({id(self)}) cancelled", flush=True)
+                    print(
+                        f"{self.reaper_script_name}({id(self)}) cancelled", flush=True
+                    )
                     run_forever_cleanup()
                     if isinstance(exc, SystemExit):
                         # Do not reraise SystemExit as it causes REAPER to exit.
@@ -114,7 +117,10 @@ class ReaperCoopEventLoop(asyncio.SelectorEventLoop):
                         return
                     raise exc
             else:
-                print(f"{self.reaper_script_name}({id(self)}) dropping {len(tasks)} stubborn tasks", flush=True)
+                print(
+                    f"{self.reaper_script_name}({id(self)}) dropping {len(tasks)} stubborn tasks",
+                    flush=True,
+                )
             print(f"{self.reaper_script_name}({id(self)}) cancelled", flush=True)
             run_forever_cleanup()
 
