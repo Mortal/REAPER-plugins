@@ -1,7 +1,7 @@
-import asyncio
 import os
 from dataclasses import dataclass
 
+import aiotk
 import rutil
 from rutil import TimeRange, RMediaItem
 
@@ -36,21 +36,23 @@ async def cut_source_slice_into_new_file(s: SourceSlice) -> SourceSlice:
     cutbase = f"{basename}_{s.slice.start*1000:.0f}_{s.slice.end*1000:.0f}"
     cutfile = os.path.join(dirname, f"{cutbase}.flac")
     if not os.path.exists(cutfile):
-        proc = await asyncio.subprocess.create_subprocess_exec(
-            "gnome-terminal",
-            "--wait",
-            "--",
-            "ffmpeg",
-            "-i",
-            s.path,
-            "-ss",
-            str(s.slice.start),
-            "-to",
-            str(s.slice.end),
-            "-y",
-            cutfile,
+        exitcode = await aiotk.tksubprocess(
+            (
+                "ffmpeg",
+                "-i",
+                s.path,
+                "-ss",
+                str(s.slice.start),
+                "-to",
+                str(s.slice.end),
+                "-y",
+                cutfile,
+            )
         )
-        await proc.wait()
+        if exitcode is None:
+            raise Exception("user cancelled ffmpeg")
+        if exitcode:
+            raise Exception(f"ffmpeg exited with code {exitcode}")
     return SourceSlice(
         cutfile, s.slice.length, s.slice - s.slice.start, s.playrate, s.itemstart
     )
