@@ -109,6 +109,23 @@ class RTrack:
         RPR_SetMediaTrackInfo_Value(self.track, "B_MUTE", 1.0 if v else 0.0)
 
     @property
+    def recinput(self) -> int:
+        return int(RPR_GetMediaTrackInfo_Value(self.track, "I_RECINPUT"))
+
+    @recinput.setter
+    def recinput(self, v: int) -> None:
+        RPR_SetMediaTrackInfo_Value(self.track, "I_RECINPUT", v)
+
+    @property
+    def recmon(self) -> int:
+        "record monitoring, 0=off, 1=normal, 2=not when playing (tape style)"
+        return int(RPR_GetMediaTrackInfo_Value(self.track, "I_RECMON"))
+
+    @recmon.setter
+    def recmon(self, v: int) -> None:
+        RPR_SetMediaTrackInfo_Value(self.track, "I_RECMON", v)
+
+    @property
     def selected(self) -> bool:
         return bool(RPR_IsTrackSelected(self.track))
 

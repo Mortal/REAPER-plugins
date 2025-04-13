@@ -22,6 +22,8 @@ Requirements
 
 - gnome-terminal
 
+- Pipewire (for plugin: Record from output monitor.py)
+
 - ffmpeg
 
 - curl
