@@ -97,6 +97,28 @@ def range_intersect(a: TimeRange | None, b: TimeRange) -> TimeRange:
 
 
 @dataclass
+class RProject:
+    project: Any
+
+    def get_play_state(self) -> int:
+        "&1=playing, &2=paused, &4=is recording"
+        return RPR_GetPlayStateEx(self.project)
+
+    def get_play_position(self) -> float:
+        "returns latency-compensated actual-what-you-hear position"
+        return RPR_GetPlayPositionEx(self.project)
+
+    def play(self) -> None:
+        RPR_OnPlayButtonEx(self.project)
+
+    def stop(self) -> None:
+        RPR_OnStopButtonEx(self.project)
+
+    def set_edit_cursor(self, pos: float, *, moveview: bool, seekplay: bool) -> None:
+        RPR_SetEditCurPos2(self.project, pos, moveview, seekplay)
+
+
+@dataclass
 class RTrack:
     track: Any
 
@@ -321,3 +343,8 @@ def set_track_selection(items):
 def select_all_tracks(items):
     for item in items:
         item.selected = True
+
+
+def get_current_project_index_name() -> tuple[RProject, int, str]:
+    proj, idx, name, _sz = RPR_EnumProjects(-1, "", MAX_STRBUF)
+    return RProject(proj), idx, name
