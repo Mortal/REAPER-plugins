@@ -30,7 +30,7 @@ MuseScore {
         let playButton = playbackModel.items[1];
         let currentlyPlaying = (playButton.icon === 62409); // Pause icon indicates playing
         if (obj.t === "hello") {
-            console.warn("sync: send helloReply");
+            console.warn("Sync: New remote connection established");
             return {
                 "t": "helloReply",
                 "protocol": "musicsync",
@@ -38,7 +38,6 @@ MuseScore {
                 "ref": obj.ref,
             };
         } else if (obj.t === "getPlayState") {
-            console.log("sync: getPlayState");
             let currentTime = playbackModel.playTime;
             let hours = currentTime.getHours();
             let minutes = currentTime.getMinutes();
@@ -52,8 +51,8 @@ MuseScore {
                 "ref": obj.ref,
             };
         } else if (obj.t == "setPlayState") {
-            console.warn("sync: setPlayState");
             if (obj.currentlyPlaying) {
+                console.warn("Sync: Remote started playing");
                 let pos = obj.pos;
                 let newTime = new Date();
                 newTime.setHours(Math.floor(pos / 3600));
@@ -64,9 +63,12 @@ MuseScore {
                 if (!currentlyPlaying) {
                     cmd("play");
                 }
-            } else if (!obj.currentlyPlaying && currentlyPlaying) {
-                // "play" is toggle between play and pause...
-                cmd("play");
+            } else if (!obj.currentlyPlaying) {
+                console.warn("Sync: Remote stopped playing");
+                if (currentlyPlaying) {
+                    // "play" is toggle between play and pause...
+                    cmd("play");
+                }
             }
             return {
                 "t": "setPlayStateReply",
@@ -78,20 +80,19 @@ MuseScore {
     }
 
     onRun: {
-        console.warn("sync: Loaded");
-	playbackModel = Qt.createQmlObject('
-	    import MuseScore.Playback 1.0
-	    PlaybackToolBarModel {}
-	', root, "dynamicPlaybackModel");
-	playbackModel.load();
+        playbackModel = Qt.createQmlObject('
+        import MuseScore.Playback 1.0
+        PlaybackToolBarModel {}
+        ', root, "dynamicPlaybackModel");
+        playbackModel.load();
 
         api.websocketserver.listen(8084, function(id) {
-            console.warn("sync: connection from client, id: " + id);
+            console.warn("Sync: connection from client, id: " + id);
             api.websocketserver.onMessage(id, function (msg) { root.onMessageToServer(id, msg); })
         })
-	console.warn("sync: Listening on 8084, connecting to 8085");
+        console.warn("Sync: Listening on 8084, connecting to 8085");
         api.websocket.open(8085, function(id) {
-            console.warn("sync: connected to server id: " + id);
+            console.warn("Sync: connected to server id: " + id);
             api.websocket.onMessage(id, function (msg) { root.onMessageToClient(id, msg); })
         });
     }
