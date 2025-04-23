@@ -47,11 +47,11 @@ async def detect_remote_play_pause(ctx: Context, proj: rutil.RProject) -> None:
             await asyncio.sleep(0)
             remote_state = None
             continue
+        if remote_state is None:
+            print("Sync: Send first getPlayState")
         ref = 2 + random.randrange(2**30)
         fut = asyncio.Future[Any]()
         refs[ref] = fut.set_result
-        if remote_state is None:
-            print("Sync: Send first getPlayState")
         await the_connection.send_str(json.dumps({"t": "getPlayState", "ref": ref}))
         await asyncio.wait([fut, local_action], timeout=1, return_when=asyncio.FIRST_COMPLETED)
         refs.pop(ref, None)
@@ -59,13 +59,13 @@ async def detect_remote_play_pause(ctx: Context, proj: rutil.RProject) -> None:
             while local_action.done():
                 local_playing, local_position = local_action.result()
                 local_action = asyncio.Future()
-                ref = 2 + random.randrange(2**30)
-                fut = asyncio.Future[Any]()
-                refs[ref] = fut.set_result
                 if local_playing:
                     print("Sync: Local started playing", local_position)
                 else:
                     print("Sync: Local stopped playing")
+                ref = 2 + random.randrange(2**30)
+                fut = asyncio.Future[Any]()
+                refs[ref] = fut.set_result
                 req = {"t": "setPlayState", "currentlyPlaying": local_playing, "pos": local_position, "ref": ref}
                 await the_connection.send_str(json.dumps(req))
                 await asyncio.wait([fut, local_action], timeout=1, return_when=asyncio.FIRST_COMPLETED)
@@ -82,19 +82,33 @@ async def detect_remote_play_pause(ctx: Context, proj: rutil.RProject) -> None:
         if remote_state is None:
             print("Sync: Got first play state")
         if remote_state is not None and remote_state["currentlyPlaying"] != reply["currentlyPlaying"]:
+            play_state = proj.get_play_state()
             if reply["currentlyPlaying"]:
-                print("Sync: Remote started playing", reply.get("pos"))
-                proj.set_edit_cursor(reply["pos"] + ctx.first_measure_start, moveview=False, seekplay=True)
-                proj.play()
-                # Get and ignore local_action
-                await local_action
-                local_action = asyncio.Future()
-            else:
+                if play_state in (0, 1, 3):
+                    print("Sync: Remote started playing", reply.get("pos"))
+                    proj.set_edit_cursor(reply["pos"] + ctx.first_measure_start, moveview=False, seekplay=True)
+                    proj.play()
+                    # Note, playing the local project causes detect_local_play_pause
+                    # to set local_action, which we COULD ignore here, but we let it play out,
+                    # since it seems to sync the playback much better when REAPER controls
+                    # the start time instead of letting MuseScore control the start time.
+                    # await local_action; local_action = asyncio.Future()
+                elif play_state == 4:
+                    print("Sync: Remote started playing (but we are currently recording)")
+                else:
+                    print(f"Sync: Remote started playing (but we are currently in play state {play_state})")
+            elif play_state == 1:
                 print("Sync: Remote stopped playing")
                 proj.stop()
                 # Get and ignore local_action
                 await local_action
                 local_action = asyncio.Future()
+            elif play_state == 0:
+                print("Sync: Remote stopped playing (but we were already stopped)")
+            elif play_state == 4:
+                print("Sync: Remote stopped playing (but we are currently recording)")
+            else:
+                print(f"Sync: Remote stopped playing (but we are in play state {play_state})")
         remote_state = reply
 
 
