@@ -47,14 +47,15 @@ async def detect_remote_play_pause(ctx: Context, proj: rutil.RProject) -> None:
             await asyncio.sleep(0)
             remote_state = None
             continue
-        if remote_state is None:
-            print("Sync: Send first getPlayState")
-        ref = 2 + random.randrange(2**30)
-        fut = asyncio.Future[Any]()
-        refs[ref] = fut.set_result
-        await the_connection.send_str(json.dumps({"t": "getPlayState", "ref": ref}))
-        await asyncio.wait([fut, local_action], timeout=1, return_when=asyncio.FIRST_COMPLETED)
-        refs.pop(ref, None)
+        if not local_action.done():
+            if remote_state is None:
+                print("Sync: Send first getPlayState")
+            ref = 2 + random.randrange(2**30)
+            fut = asyncio.Future[Any]()
+            refs[ref] = fut.set_result
+            await the_connection.send_str(json.dumps({"t": "getPlayState", "ref": ref}))
+            await asyncio.wait([fut, local_action], timeout=1, return_when=asyncio.FIRST_COMPLETED)
+            refs.pop(ref, None)
         if local_action.done():
             while local_action.done():
                 local_playing, local_position = local_action.result()
@@ -124,11 +125,11 @@ async def detect_local_play_pause(ctx: Context, proj: rutil.RProject) -> None:
         state2 = 0 if position2 < 0 else proj.get_play_state()
         if state1 == 0 and state2 == 1:
             # print("Pause -> Play", the_connection is None, remote_state)
-            if local_action is not None:
+            if local_action is not None and not local_action.done():
                 local_action.set_result((True, position2))
         if state1 == 1 and state2 == 0:
             # print("Play -> Pause")
-            if local_action is not None:
+            if local_action is not None and not local_action.done():
                 local_action.set_result((False, position2))
         state1 = state2
         # position1 = position2
