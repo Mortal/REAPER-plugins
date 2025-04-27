@@ -123,11 +123,11 @@ async def detect_local_play_pause(ctx: Context, proj: rutil.RProject) -> None:
         await asyncio.sleep(0)
         position2 = proj.get_play_position() - ctx.first_measure_start
         state2 = 0 if position2 < 0 else proj.get_play_state()
-        if state1 == 0 and state2 == 1:
+        if state1 == 0 and state2:
             # print("Pause -> Play", the_connection is None, remote_state)
             if local_action is not None and not local_action.done():
                 local_action.set_result((True, position2))
-        if state1 == 1 and state2 == 0:
+        if state1 and state2 == 0:
             # print("Play -> Pause")
             if local_action is not None and not local_action.done():
                 local_action.set_result((False, position2))
