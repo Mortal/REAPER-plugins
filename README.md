@@ -24,6 +24,8 @@ Requirements
 
 - Pipewire (for plugin: Record from output monitor.py)
 
+- Wireplumber (for plugin: auto-connect-ports.lua)
+
 - MuseScore 4 (for plugin: Sync MuseScore 4 with REAPER.py)
 
 - ffmpeg
