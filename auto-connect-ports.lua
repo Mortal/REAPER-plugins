@@ -98,7 +98,7 @@ local auto_connect = {
     output = { portfmt = "REAPER:out%d", from = 1 },
     input = {
       { portfmt = "Scarlett 4i4 USB:playback_AUX%d", from = 0 },
-      { default_sink = true },
+      { default_sink = true, min_count = 4 },
     },
   },
   {
@@ -112,6 +112,10 @@ local auto_connect = {
   {
     input = { portfmt = "REAPER:in%d", from = 19 },
     output = { default_sink_monitor = true },
+  },
+  {
+    output = { portfmt = "REAPER:out%d", from = 7 },
+    input = { portfmt = "Headphones:playback_%s", ports = { "FL", "FR" } },
   },
 }
 
@@ -158,7 +162,7 @@ function get_auto_connect_links()
     return port
   end
 
-  function get_default_ports(d, om)
+  function get_default_ports(d, om, min_count)
     -- d should be "default.audio.source" or "default.audio.sink"
     local node_id = get_default_node_id(d)
     local found = {}
@@ -172,6 +176,13 @@ function get_auto_connect_links()
       for _id, port in ipairs(by_port_id) do
         table.insert(found, port)
       end
+      if #found > 0 and min_count then
+        while #found < min_count do
+          for _id, port in ipairs(by_port_id) do
+            table.insert(found, port)
+          end
+        end
+      end
       --if #found == 0 then
       --  print(string.format("Did not find any ports on %s with id %d", d, node_id))
       --end
@@ -184,11 +195,11 @@ function get_auto_connect_links()
     for _i, spec in ipairs(specs) do
       local found = nil
       if spec.default_sink then
-        return get_default_ports("default.audio.sink", input_om)
+        return get_default_ports("default.audio.sink", input_om, spec.min_count)
       elseif spec.default_source then
-        return get_default_ports("default.audio.source", output_om)
+        return get_default_ports("default.audio.source", output_om, spec.min_count)
       elseif spec.default_sink_monitor then
-        return get_default_ports("default.audio.sink", output_om)
+        return get_default_ports("default.audio.sink", output_om, spec.min_count)
       elseif spec.ports then
         local portname = string.format(spec.portfmt, spec.ports[1])
         local port = find_port(cache, om, portname)
