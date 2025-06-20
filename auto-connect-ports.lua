@@ -102,12 +102,22 @@ local auto_connect = {
     },
   },
   {
+    output = { portfmt = "REAPER:out%d", from = 7 },
+    input = { default_sink = true, min_count = 2 },
+  },
+  {
     output = { portfmt = "REAPER:out%d", from = 11 },
-    input = { portfmt = "Blue Microphones:playback_%s", ports = { "FL", "FR" } },
+    input = {
+      { portfmt = "Blue Microphones:playback_%s", ports = { "FL", "FR" } },
+      { portfmt = "Blue Microphones:playback_%s", ports = { "AUX0", "AUX1" } },
+    }
   },
   {
     input = { portfmt = "REAPER:in%d", from = 11 },
-    output = { portfmt = "Blue Microphones:capture_%s", ports = { "FL", "FR" } },
+    output = {
+      { portfmt = "Blue Microphones:capture_%s", ports = { "FL", "FR" } },
+      { portfmt = "Blue Microphones:capture_%s", ports = { "AUX0", "AUX1" } },
+    }
   },
   {
     input = { portfmt = "REAPER:in%d", from = 19 },
