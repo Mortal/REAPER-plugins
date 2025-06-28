@@ -1,0 +1,121 @@
+// vim:set sw=2 et:
+// REAPER plugin that opens a TCP socket and echoes back whatever is written on it.
+// Written in the style of a desugared async function, with an explicit state machine.
+// Loops in the same state use defer() to make the REAPER GUI responsive.
+// State transitions to states that perform I/O use "do_gonext = 1" to avoid unnecessary defer().
+// Run before starting the REAPER script: nc -Nv -lp 32570
+// Or run after starting the REAPER script: nc -Nv localhost 32569
+port_connect = 32570;
+port_listen = 32569;
+
+state = 100;
+conn = 0;
+
+s_remote_addr = 10;
+s_recv_buf = 11;
+
+function mainloop()
+(
+  do_gonext = 1;
+  while (do_gonext) (
+    do_gonext = 0;
+    state == 100 ? (
+      // Try once to make an outbound connection.
+      conn = tcp_connect("127.0.0.1", port_connect, 0);
+      conn > 0 ? (
+        n_sent = tcp_send(conn, "hello\n");
+        n_sent < 0 ? (
+          // Connect succeeded, but send failed - probably not a real connect.
+          // Treat it the same as if the connect failed:
+          // skip trying to connect and start listening instead.
+          tcp_close(conn);
+          state = 150;
+          do_gonext = 1;
+        ) : n_sent < 6 ? (
+          printf("tcp_send only sent %d bytes\n", n_sent);
+          state = -1;
+        ) : (
+          strcpy(s_remote_addr, "-");
+          state = 200;
+          do_gonext = 1;
+        );
+      ) : (
+        // Connect failed (conn=0 or negative),
+        // skip trying to connect and start listening instead.
+        state = 150;
+        do_gonext = 1;
+      );
+    ) : state == 150 ? (
+      // Keep listening for a connection in a loop.
+      conn = tcp_listen(port_listen, "", s_remote_addr);
+      conn < 0 ? (
+        printf("tcp_listen error\n");
+        state = -1;
+      ) : conn > 0 ? (
+        tcp_listen_end(port_listen);
+        tcp_set_block(conn, 0);
+        n_sent = tcp_send(conn, "hello\n");
+        n_sent < 0 ? (
+          // Accept succeeded, but send failed. That's a fatal error.
+          printf("%s: tcp_send after accept failed\n", s_remote_addr);
+          tcp_close(conn);
+          state = -1;
+        ) : n_sent < 6 ? (
+          // Partial send - that's a fatal error.
+          printf("%s: tcp_send only sent %d bytes\n", s_remote_addr, n_sent);
+          tcp_close(conn);
+          state = -1;
+        ) : (
+          // The send was successful.
+          strcpy(s_remote_addr, "-");
+          state = 200;
+          do_gonext = 1;
+        );
+      ) : (
+        // No connection yet; keep listening.
+        defer("mainloop()");
+      );
+    ) : state == 200 ? (
+      // Connection established. Receive a message in a loop.
+      n_recv_buf = tcp_recv(conn, s_recv_buf);
+      n_recv_buf < 0 ? (
+        // recv failed - perhaps the connection was closed on the remote end.
+        tcp_close(conn);
+        state = 100;
+        do_gonext = 1;
+      ) : n_recv_buf > 0 ? (
+        state = 300;
+        do_gonext = 1;
+      ) : (
+        defer("mainloop()");
+      );
+    ) : state == 300 ? (
+      // Message received. If "quit", stop the script.
+      strncmp(s_recv_buf, "quit", 4) == 0 ? (
+        tcp_send(conn, "bye\n", 4);
+        tcp_close(conn);
+        state = -1;
+      ) : (
+        state = 301;
+        do_gonext = 1;
+      );
+    ) : state == 301 ? (
+      // Echo back the received message.
+      n_sent = tcp_send(conn, s_recv_buf, n_recv_buf);
+      n_sent < 0 ? (
+        printf("%s: tcp_send error\n", s_remote_addr);
+        tcp_close(conn);
+        state = -1;
+      ) : n_sent < n_recv_buf ? (
+        printf("%s: tcp_send only sent %d bytes\n", s_remote_addr, n_sent);
+      ) : n_sent > 0 ? (
+        state = 200;
+        do_gonext = 1;
+      ) : (
+        defer("mainloop()");
+      );
+    );
+  );
+);
+
+mainloop();
