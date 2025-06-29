@@ -5,14 +5,64 @@
 // State transitions to states that perform I/O use "do_gonext = 1" to avoid unnecessary defer().
 // Run before starting the REAPER script: nc -Nv -lp 32570
 // Or run after starting the REAPER script: nc -Nv localhost 32569
+// python3 remote_showmenu.py 'My menu item'
+
 port_connect = 32570;
 port_listen = 32569;
 
 state = 100;
 conn = 0;
 
-s_remote_addr = 10;
-s_recv_buf = 11;
+recv_bufsize = 0;
+recv_bufoffs = 0;
+
+OP_GFX_SHOWMENU = 160;
+OP_GFX_SHOWMENU_REPLY = 161;
+
+function useBytes()
+(
+  recv_bufsize == 0 ? (
+    0  // No bytes to use
+  ) : recv_bufoffs == recv_bufsize ? (
+    recv_bufsize = 0;
+    recv_bufoffs = 0;
+    #recv_buf = "";
+  ) : recv_bufoffs > 0 ? (
+    strcpy_from(#recv_buf, #recv_buf, recv_bufoffs);
+    recv_bufsize -= recv_bufoffs;
+    recv_bufoffs = 0;
+  );
+);
+
+function ensureBytesOnce(n)
+(
+  recv_bufsize >= n ? (
+    // Already got the bytes we need
+    n_recv_buf = 0;
+  ) : recv_bufsize == 0 ? (
+    n_recv_buf = tcp_recv(conn, #recv_buf);
+    n_recv_buf >= 0 ? (
+      recv_bufsize = n_recv_buf;
+    );
+  ) : (
+    n_recv_buf = tcp_recv(conn, #recv_tmp);
+    n_recv_buf > 0 ? (
+      strncat(#recv_buf, #recv_tmp, n_recv_buf);
+      recv_bufsize += n_recv_buf;
+    );
+  );
+);
+
+function ensureBytes(n)
+(
+  while (recv_bufsize < n) (
+    ensureBytesOnce(n);
+    n_recv_buf <= 0 ? (
+      // Modify parameter slot n in order to exit loop
+      n = recv_bufsize;
+    );
+  )
+);
 
 function mainloop()
 (
@@ -23,7 +73,7 @@ function mainloop()
       // Try once to make an outbound connection.
       conn = tcp_connect("127.0.0.1", port_connect, 0);
       conn > 0 ? (
-        n_sent = tcp_send(conn, "hello\n");
+        n_sent = tcp_send(conn, "Mav\n");
         n_sent < 0 ? (
           // Connect succeeded, but send failed - probably not a real connect.
           // Treat it the same as if the connect failed:
@@ -35,7 +85,10 @@ function mainloop()
           printf("tcp_send only sent %d bytes\n", n_sent);
           state = -1;
         ) : (
-          strcpy(s_remote_addr, "-");
+          #remote_addr = "-";
+          #recv_buf = "";
+          recv_bufsize = 0;
+          recv_bufoffs = 0;
           state = 200;
           do_gonext = 1;
         );
@@ -47,27 +100,29 @@ function mainloop()
       );
     ) : state == 150 ? (
       // Keep listening for a connection in a loop.
-      conn = tcp_listen(port_listen, "", s_remote_addr);
+      conn = tcp_listen(port_listen, "", #remote_addr);
       conn < 0 ? (
         printf("tcp_listen error\n");
         state = -1;
       ) : conn > 0 ? (
         tcp_listen_end(port_listen);
         tcp_set_block(conn, 0);
-        n_sent = tcp_send(conn, "hello\n");
+        n_sent = tcp_send(conn, "Mav\n");
         n_sent < 0 ? (
           // Accept succeeded, but send failed. That's a fatal error.
-          printf("%s: tcp_send after accept failed\n", s_remote_addr);
+          printf("%s: tcp_send after accept failed\n", #remote_addr);
           tcp_close(conn);
           state = -1;
-        ) : n_sent < 6 ? (
+        ) : n_sent < 4 ? (
           // Partial send - that's a fatal error.
-          printf("%s: tcp_send only sent %d bytes\n", s_remote_addr, n_sent);
+          printf("%s: tcp_send only sent %d bytes\n", #remote_addr, n_sent);
           tcp_close(conn);
           state = -1;
         ) : (
           // The send was successful.
-          strcpy(s_remote_addr, "-");
+          #recv_buf = "";
+          recv_bufsize = 0;
+          recv_bufoffs = 0;
           state = 200;
           do_gonext = 1;
         );
@@ -77,43 +132,54 @@ function mainloop()
       );
     ) : state == 200 ? (
       // Connection established. Receive a message in a loop.
-      n_recv_buf = tcp_recv(conn, s_recv_buf);
+      useBytes();
+      ensureBytes(4);
+      msgsize = recv_bufsize < 4 ? 0 : str_getchar(#recv_buf, 0, 'iu');
       n_recv_buf < 0 ? (
-        // recv failed - perhaps the connection was closed on the remote end.
+        // Receive error, probably closed connection
         tcp_close(conn);
-        state = 100;
+        state = 150;
         do_gonext = 1;
-      ) : n_recv_buf > 0 ? (
-        state = 300;
-        do_gonext = 1;
-      ) : (
-        defer("mainloop()");
-      );
-    ) : state == 300 ? (
-      // Message received. If "quit", stop the script.
-      strncmp(s_recv_buf, "quit", 4) == 0 ? (
+      ) : msgsize > 10000 ? (
+        printf("%s: msgsize %u exceeds limit\n", #remote_addr, msgsize);
         tcp_send(conn, "bye\n", 4);
         tcp_close(conn);
         state = -1;
       ) : (
-        state = 301;
-        do_gonext = 1;
-      );
-    ) : state == 301 ? (
-      // Echo back the received message.
-      n_sent = tcp_send(conn, s_recv_buf, n_recv_buf);
-      n_sent < 0 ? (
-        printf("%s: tcp_send error\n", s_remote_addr);
-        tcp_close(conn);
-        state = -1;
-      ) : n_sent < n_recv_buf ? (
-        printf("%s: tcp_send only sent %d bytes\n", s_remote_addr, n_sent);
-      ) : n_sent > 0 ? (
-        state = 200;
-        do_gonext = 1;
-      ) : (
-        defer("mainloop()");
-      );
+        ensureBytes(4 + msgsize);
+        recv_bufsize >= 4 + msgsize ? (
+          op = str_getchar(#recv_buf, 4, 'cu');
+          op == OP_GFX_SHOWMENU ? (
+            // n:u32 op:u8 x:f32 y:f32 s:[rest]
+            // stroffs = 13
+            // strlen = msgsize - 9
+            msgsize < 10 ? (
+              printf("%s: msgsize %u too small for OP_GFX_SHOWMENU\n", #remote_addr, msgsize);
+              tcp_send(conn, "bye\n", 4);
+              tcp_close(conn);
+              state = -1;
+            ) : (
+              gfx_x = str_getchar(#recv_buf, 5, 'f');
+              gfx_y = str_getchar(#recv_buf, 9, 'f');
+              s = #;
+              strcpy_substr(s, #recv_buf, 13, msgsize - 9);
+              r = gfx_showmenu(s);
+              strcpy(s, "12345");
+              str_setchar(s, 0, OP_GFX_SHOWMENU_REPLY, 'cu');
+              str_setchar(s, 1, r, 'i');
+              tcp_send(conn, s, 5);
+              recv_bufoffs = 4 + msgsize;
+              do_gonext = 1;
+            )
+          ) : (
+            // Just skip the unknown message
+            recv_bufoffs = 4 + msgsize;
+            do_gonext = 1;
+          )
+        ) : (
+          defer("mainloop()");
+        );
+      )
     );
   );
 );
