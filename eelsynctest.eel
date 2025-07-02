@@ -16,9 +16,6 @@ conn = 0;
 recv_bufsize = 0;
 recv_bufoffs = 0;
 
-OP_GFX_SHOWMENU = 160;
-OP_GFX_SHOWMENU_REPLY = 161;
-
 function useBytes()
 (
   recv_bufsize == 0 ? (
@@ -81,7 +78,7 @@ function mainloop()
           tcp_close(conn);
           state = 150;
           do_gonext = 1;
-        ) : n_sent < 6 ? (
+        ) : n_sent < 4 ? (
           printf("tcp_send only sent %d bytes\n", n_sent);
           state = -1;
         ) : (
@@ -149,7 +146,7 @@ function mainloop()
         ensureBytes(4 + msgsize);
         recv_bufsize >= 4 + msgsize ? (
           op = str_getchar(#recv_buf, 4, 'cu');
-          op == OP_GFX_SHOWMENU ? (
+          op == 160 ? (  // OP_GFX_SHOWMENU
             // n:u32 op:u8 x:f32 y:f32 s:[rest]
             // stroffs = 13
             // strlen = msgsize - 9
@@ -165,12 +162,44 @@ function mainloop()
               strcpy_substr(s, #recv_buf, 13, msgsize - 9);
               r = gfx_showmenu(s);
               strcpy(s, "12345");
-              str_setchar(s, 0, OP_GFX_SHOWMENU_REPLY, 'cu');
+              str_setchar(s, 0, 161, 'cu');  // OP_GFX_SHOWMENU_REPLY
               str_setchar(s, 1, r, 'i');
               tcp_send(conn, s, 5);
               recv_bufoffs = 4 + msgsize;
               do_gonext = 1;
             )
+          ) : op == 162 ? (  // OP_GFX_INIT
+            // n:u32 op:u8 width:f32 height:f32 dockstate:f32 xpos:f32 ypos:f32 s:[rest]
+            // stroffs = 25
+            // strlen = msgsize - 21
+            msgsize < 21 ? (
+              printf("%s: msgsize %u too small for OP_GFX_INIT\n", #remote_addr, msgsize);
+            ) : (
+              width = str_getchar(#recv_buf, 5, 'f');
+              height = str_getchar(#recv_buf, 9, 'f');
+              dockstate = str_getchar(#recv_buf, 13, 'f');
+              xpos = str_getchar(#recv_buf, 17, 'f');
+              ypos = str_getchar(#recv_buf, 21, 'f');
+              s = #;
+              strcpy_substr(s, #recv_buf, 25, msgsize - 21);
+              gfx_init(s,width,height,dockstate,xpos,ypos);
+              gfx_x = 0;
+              gfx_y = 0;
+              gfx_printf("hello world");
+            );
+            recv_bufoffs = 4 + msgsize;
+            do_gonext = 1;
+          ) : op == 163 ? (  // OP_GFX_QUIT
+            // n:u32 op:u8
+            // stroffs = 25
+            // strlen = msgsize - 21
+            msgsize != 1 ? (
+              printf("%s: msgsize %u incorrect for OP_GFX_QUIT\n", #remote_addr, msgsize);
+            ) : (
+              gfx_quit();
+            );
+            recv_bufoffs = 4 + msgsize;
+            do_gonext = 1;
           ) : (
             // Just skip the unknown message
             recv_bufoffs = 4 + msgsize;
