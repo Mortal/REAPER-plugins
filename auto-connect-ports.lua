@@ -120,6 +120,25 @@ local auto_connect = {
     }
   },
   {
+    output = { portfmt = "REAPER:out%d", from = 13 },
+    input = {
+      -- Note, for Yeti Nano, be sure to select "Analog Stereo Duplex" as the profile,
+      -- so that the pipewire volume knob controls the hardware's gain.
+      -- If "Pro Audio" is selected, the pipewire volume knob is a simple
+      -- filter on the microphone signal, which will be highly susceptible to clipping.
+      -- Ref: https://bbs.archlinux.org/viewtopic.php?pid=2095461#p2095461
+      { portfmt = "Yeti Nano:playback_%s", ports = { "FL", "FR" } },
+      { portfmt = "Yeti Nano:playback_%s", ports = { "AUX0", "AUX1" } },
+    }
+  },
+  {
+    input = { portfmt = "REAPER:in%d", from = 13 },
+    output = {
+      { portfmt = "Yeti Nano:capture_%s", ports = { "FL", "FR" } },
+      { portfmt = "Yeti Nano:capture_%s", ports = { "AUX0", "AUX1" } },
+    }
+  },
+  {
     input = { portfmt = "REAPER:in%d", from = 19 },
     output = { default_sink_monitor = true },
   },
