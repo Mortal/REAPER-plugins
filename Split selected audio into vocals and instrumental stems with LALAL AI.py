@@ -1,7 +1,7 @@
+import asyncio
 import os
 import sys
 
-import aiotk
 import split_stems
 from reaper_loop import reaper_loop_run
 
@@ -12,16 +12,20 @@ async def main() -> None:
     filenames = [filename_fmt.format(stem=s) for s in "vocals no_vocals".split()]
     paths = [os.path.join(prep.dirname, f) for f in filenames]
     if not all(os.path.exists(p) for p in paths):
-        exitcode = await aiotk.tksubprocess(
-            (
-                os.path.join(sys.path[0], "lalalcli"),
-                str(prep.source_slice.path),
-                str(prep.source_slice.slice.start),
-                str(prep.source_slice.slice.end),
-                paths[0],
-                paths[1],
-            )
+        proc = await asyncio.subprocess.create_subprocess_exec(
+            "gnome-terminal",
+            "--geometry=122x10",
+            "--wait",
+            "--",
+            os.path.join(sys.path[0], "lalalcli"),
+            "--no-confirm",
+            str(prep.source_slice.path),
+            str(prep.source_slice.slice.start),
+            str(prep.source_slice.slice.end),
+            paths[0],
+            paths[1],
         )
+        exitcode = await proc.wait()
         if exitcode:
             raise Exception(f"lalalcli exited with code {exitcode}")
         if exitcode is None:
