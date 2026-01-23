@@ -90,16 +90,20 @@ local auto_connect = {
   {
     input = { portfmt = "REAPER:in%d", from = 1 },
     output = {
+      { portfmt = "Scarlett 18i16 4th Gen:capture_AUX%d", from = 0 },
       { portfmt = "Scarlett 4i4 USB:capture_AUX%d", from = 0 },
       { default_source = true },
     },
+    max_count = 10,
   },
   {
     output = { portfmt = "REAPER:out%d", from = 1 },
     input = {
+      { portfmt = "Scarlett 18i16 4th Gen:playback_AUX%d", from = 0 },
       { portfmt = "Scarlett 4i4 USB:playback_AUX%d", from = 0 },
       { default_sink = true, min_count = 4 },
     },
+    max_count = 6,
   },
   {
     output = { portfmt = "REAPER:out%d", from = 7 },
@@ -260,8 +264,12 @@ function get_auto_connect_links()
     --if not output then
     --  print(string.format("auto_connect[%d]: no output", j))
     --end
+    local count = link.max_count
+    if not count then
+      count = 100
+    end
     if input and output then
-      for i = 1,100,1 do
+      for i = 1,count,1 do
         local inp = input(i)
         if not inp then
           break
