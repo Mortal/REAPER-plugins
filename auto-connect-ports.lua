@@ -90,11 +90,11 @@ local auto_connect = {
   {
     input = { portfmt = "REAPER:in%d", from = 1 },
     output = {
-      { portfmt = "Scarlett 18i16 4th Gen:capture_AUX%d", from = 0 },
+      { portfmt = "Scarlett 18i16 4th Gen:capture_AUX%d", from = 10 },
       { portfmt = "Scarlett 4i4 USB:capture_AUX%d", from = 0 },
       { default_source = true },
     },
-    max_count = 10,
+    max_count = 8,
   },
   {
     output = { portfmt = "REAPER:out%d", from = 1 },
@@ -103,18 +103,19 @@ local auto_connect = {
       { portfmt = "Scarlett 4i4 USB:playback_AUX%d", from = 0 },
       { default_sink = true, min_count = 4 },
     },
-    max_count = 6,
+    max_count = 18,
   },
   {
-    output = { portfmt = "REAPER:out%d", from = 7 },
+    output = { portfmt = "REAPER:out%d", from = 19 },
     input = { default_sink = true, min_count = 2 },
+    max_count = 2,
   },
   {
-    output = { portfmt = "REAPER:out%d", from = 11 },
+    output = { portfmt = "REAPER:out%d", from = 21 },
     input = {
       { portfmt = "Blue Microphones:playback_%s", ports = { "FL", "FR" } },
       { portfmt = "Blue Microphones:playback_%s", ports = { "AUX0", "AUX1" } },
-    }
+    },
   },
   {
     input = { portfmt = "REAPER:in%d", from = 11 },
@@ -124,7 +125,7 @@ local auto_connect = {
     }
   },
   {
-    output = { portfmt = "REAPER:out%d", from = 13 },
+    output = { portfmt = "REAPER:out%d", from = 23 },
     input = {
       -- Note, for Yeti Nano, be sure to select "Analog Stereo Duplex" as the profile,
       -- so that the pipewire volume knob controls the hardware's gain.
@@ -133,7 +134,7 @@ local auto_connect = {
       -- Ref: https://bbs.archlinux.org/viewtopic.php?pid=2095461#p2095461
       { portfmt = "Yeti Nano:playback_%s", ports = { "FL", "FR" } },
       { portfmt = "Yeti Nano:playback_%s", ports = { "AUX0", "AUX1" } },
-    }
+    },
   },
   {
     input = { portfmt = "REAPER:in%d", from = 13 },
@@ -145,10 +146,6 @@ local auto_connect = {
   {
     input = { portfmt = "REAPER:in%d", from = 19 },
     output = { default_sink_monitor = true },
-  },
-  {
-    output = { portfmt = "REAPER:out%d", from = 7 },
-    input = { portfmt = "Headphones:playback_%s", ports = { "FL", "FR" } },
   },
 }
 
