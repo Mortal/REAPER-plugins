@@ -99,11 +99,18 @@ local auto_connect = {
   {
     output = { portfmt = "REAPER:out%d", from = 1 },
     input = {
-      { portfmt = "Scarlett 18i16 4th Gen:playback_AUX%d", from = 0 },
+      { portfmt = "Scarlett 18i16 4th Gen:playback_AUX%d", from = 2 },
       { portfmt = "Scarlett 4i4 USB:playback_AUX%d", from = 0 },
       { default_sink = true, min_count = 4 },
     },
-    max_count = 18,
+    max_count = 16,
+  },
+  {
+    output = { portfmt = "REAPER:out%d", from = 17 },
+    input = {
+      { portfmt = "Scarlett 18i16 4th Gen:playback_AUX%d", from = 0 },
+    },
+    max_count = 2,
   },
   {
     output = { portfmt = "REAPER:out%d", from = 19 },
